@@ -4,6 +4,7 @@ package com.riak.tools
 import java.io._
 import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.io._
+import com.typesafe.config.ConfigFactory
 import akka.actor.ActorSystem
 import akka.actor.{Props, ActorRef, Actor}
 import akka.routing.RoundRobinRouter
@@ -59,7 +60,7 @@ object Copy {
 		conf = config
 		sc = RiakClient.newInstance(conf.source)
 		dc = RiakClient.newInstance(conf.destination)
-		val copySystem = ActorSystem("copySystem")
+		val copySystem = ActorSystem("copy", ConfigFactory.load.getConfig("copy"))
 		val copyMaster = copySystem.actorOf(Props(new CopyMaster()), name = "copyMaster")
 		copyMaster ! Copy
 		copySystem.registerOnTermination({ sc.shutdown(); dc.shutdown() })
@@ -125,13 +126,13 @@ class CopyMaster() extends Actor {
 class CopyWorker extends Actor {
 	val conf = Copy.conf
 	def receive = {		
-		case key: String =>{
+		case key: String => {
 			Copy.sc.get(conf.sourceBucket, key, conf.stopOnFetchConflicts) match {    		
     			case value: String => { Copy.dc.set(conf.destBucket, key, value); sender ! 1 }
     			case _ => println("No value for key '%s'".format(key))
-			}			
+			}
 		}
 		case EndOfKeyRange() => sender ! EndOfKeyRange()
-	}	
+	}
 }
 
