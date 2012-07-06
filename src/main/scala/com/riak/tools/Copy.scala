@@ -19,6 +19,7 @@ object Copy {
 	case class Config(
 			source: String = "conf/source.nodes",
 			keysAlphabet: String = "0123456789abcdefghjkmnpqrstvwxyz", //Crockford Base32
+			keysAlphabetEnding: String = "~",
 			destination: String = "conf/destination.nodes", 
 			sourceBucket: String = "",
 			destBucket: String = "",
@@ -33,6 +34,8 @@ object Copy {
     			{(v: String, c: Config) => c.copy(source = v)},
     		opt("k", "keysAlphabet", "s", "source keys alphabet. Default: %s".format(Config().keysAlphabet)) 
     			{(v: String, c: Config) => c.copy(keysAlphabet = v)},
+    		opt("ke", "keysAlphabetEnding", "s", "source keys alphabet ending. Must be > last letter in alphabet. Default: %s".format(Config().keysAlphabetEnding)) 
+    			{(v: String, c: Config) => c.copy(keysAlphabetEnding = v)},
     		opt("d", "dest", "<file>", "destination nodes list filename. Default: %s".format(Config().destination)) 
     			{(v: String, c: Config) => c.copy(destination = v)},
     		intOpt("t", "timeout", "n", "timeout in ms for Riak operations. Default: %s ms".format(Config().timeoutMs)) 
@@ -105,9 +108,9 @@ class CopyMaster() extends Actor {
 	}
 	
 	def generateKeyRanges(keysAlphabet: String): Seq[(String,String)] = {
-    	val k = keysAlphabet.toSeq.sorted
-    	(if (k.length % 2 == 0) k ++ Seq(k.last, "~") else k ++ "~")
-    	.grouped(2).collect{ case Seq(a,b) => (a.toString,b.toString) }.toSeq
+		val k = keysAlphabet.toSeq.sorted
+		(if (k.length % 2 == 0) k ++ Seq(k.last, conf.keysAlphabetEnding) else k ++ conf.keysAlphabetEnding)
+		.grouped(2).collect{ case Seq(a,b) => (a.toString,b.toString) }.toSeq
     }
 	
 	def nextKeyRange(): Any = {
