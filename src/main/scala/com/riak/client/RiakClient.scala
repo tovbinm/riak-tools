@@ -20,12 +20,13 @@ class RiakClient (hostPortsFile: String, hostPorts: Seq[(String,Int)]) {
 	def this(hostPortsFile: String) = this(hostPortsFile, RiakClient.getHostPorts(hostPortsFile))
 	
 	val rkv = {
-	  println ("Hostports: %s".format(hostPorts.mkString(",")))
       val clusterConf = new PBClusterConfig(ClusterConfig.UNLIMITED_CONNECTIONS)
       hostPorts.map { hp => new PBClientConfig.Builder().withHost(hp._1).withPort(hp._2).build }
                .foreach { clusterConf.addClient(_) }
       new PBClusterClient(clusterConf)
 	}
+	
+	override def toString() = hostPorts.mkString(",")
 	
 	def get(bucket: String, key: String, stopOnConflicts: Boolean): String = {
 	    rkv.fetch(bucket, key) match {
@@ -65,7 +66,7 @@ class RiakClient (hostPortsFile: String, hostPorts: Seq[(String,Int)]) {
 		mr.timeout(timeoutMs).execute 
 	}
 	
-	def shutdown = rkv.shutdown
+	def shutdown() = rkv.shutdown()
 	 
 }
 
