@@ -28,25 +28,22 @@ class RiakClient (hostPortsFile: String, hostPorts: Seq[(String,Int)]) {
 	
 	override def toString() = hostPorts.mkString(",")
 	
-	def get(bucket: String, key: String, stopOnConflicts: Boolean): String = {
+	def get(bucket: String, key: String, stopOnConflicts: Boolean): IRiakObject = {
 	    rkv.fetch(bucket, key) match {
 	    	case r: RiakResponse if r.hasValue && r.hasSiblings => {	    		
 	    		stopOnConflicts match {
 	    			case false => r.getRiakObjects.max(new Ordering[IRiakObject] {
 	    							def compare(x: IRiakObject, y: IRiakObject): Int = x.getLastModified compareTo y.getLastModified
-	    						 }).getValueAsString
+	    						 })
 	    			case true => throw new Exception("Conflicts detected for '%s' in '%s'".format(key, bucket))
 	    		}
 	    	}
-	    	case r: RiakResponse if r.hasValue => r.getRiakObjects()(0).getValueAsString
+	    	case r: RiakResponse if r.hasValue => r.getRiakObjects()(0)
 	    	case _ => null
 	    }
 	}
 	
-	def set(bucket: String, key: String, value: String) {  
-		val item = RiakObjectBuilder.newBuilder(bucket, key).withValue(value).build
-		rkv.store(item)
-	}
+	def set(o: IRiakObject) = rkv.store(o)
 
 	def del(bucket: String, key: String) = rkv.delete(bucket, key)
   

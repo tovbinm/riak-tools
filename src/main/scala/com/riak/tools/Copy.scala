@@ -13,6 +13,7 @@ import com.riak.client.RiakClient
 import com.basho.riak.client.raw.pbc.PBClusterClient
 import com.basho.riak.client.raw.query.indexes.BinRangeQuery
 import com.basho.riak.client.query.indexes.KeyIndex
+import com.basho.riak.client.IRiakObject
 import akka.routing.Broadcast
 
 
@@ -22,8 +23,7 @@ object Copy {
 			keysAlphabet: String = "0123456789abcdefghjkmnpqrstvwxyz", //Crockford Base32
 			keysAlphabetEnding: String = "~",
 			destination: String = "conf/destination.nodes", 
-			sourceBucket: String = "",
-			destBucket: String = "",
+			bucket: String = "",			
 			stopOnFetchConflicts: Boolean = false,
 			timeoutMs: Long = 3600*1000,
 			numOfWorkers: Int = 10,
@@ -46,8 +46,7 @@ object Copy {
     		intOpt("p", "printProgressEvery", "n", "print progress rate. Default: %s items".format(Config().printProgressEvery)) 
     			{(v: Int, c: Config) => c.copy(printProgressEvery = v)},
     		flag("sfc", "stopOnFetchConflicts", "stop on fetch conflicts.") {_.copy(stopOnFetchConflicts = true)},
-    		arg("sourceBucket", "source bucket name") {(v: String, c: Config) => c.copy(sourceBucket = v)},
-    		arg("destBucket", "destination bucket name") {(v: String, c: Config) => c.copy(destBucket = v)}
+    		arg("bucket", "a bucket name to copy") {(v: String, c: Config) => c.copy(bucket = v)}
     	)}
     	parser.parse(args, Config()) map { copy(_) }
     }
@@ -85,7 +84,7 @@ class CopyMaster() extends Actor {
 	def receive = {		
 		case Copy => self ! nextKeyRange()		
 		case c: NextKeyRange => {
-			val keys = Copy.sc.keysRange(conf.sourceBucket, c.from, c.to)
+			val keys = Copy.sc.keysRange(conf.bucket, c.from, c.to)
 			println("Copying range [%s, %s]. Total %d items".format(c.from, c.to, keys.length))			
 			keys.foreach { workerRouter ! _ }
 			workerRouter ! Broadcast(EndOfKeyRange())
@@ -127,8 +126,8 @@ class CopyWorker extends Actor {
 	val conf = Copy.conf
 	def receive = {		
 		case key: String => {
-			Copy.sc.get(conf.sourceBucket, key, conf.stopOnFetchConflicts) match {    		
-    			case value: String => { Copy.dc.set(conf.destBucket, key, value); sender ! 1 }
+			Copy.sc.get(conf.bucket, key, conf.stopOnFetchConflicts) match {
+    			case item: IRiakObject => { Copy.dc.set(item); sender ! 1 }
     			case _ => println("No value for key '%s'".format(key))
 			}
 		}
