@@ -1,29 +1,29 @@
 package com.riak.client
 
-import scala.io.Source
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.mutable.Buffer
-import com.basho.riak.client.builders.RiakObjectBuilder
+import scala.io.Source
+
 import com.basho.riak.client.query.functions.JSSourceFunction
 import com.basho.riak.client.query.indexes.KeyIndex
 import com.basho.riak.client.query.{MapReduceResult, BucketMapReduce}
 import com.basho.riak.client.raw.config.ClusterConfig
-import com.basho.riak.client.raw.pbc.{PBClusterConfig, PBClusterClient, PBClientConfig}
+import com.basho.riak.client.raw.http.{HTTPClusterConfig, HTTPClusterClient}
 import com.basho.riak.client.raw.query.indexes.BinRangeQuery
-import com.basho.riak.client.IRiakObject
 import com.basho.riak.client.raw.RiakResponse
+import com.basho.riak.client.IRiakObject
 
 
 
 class RiakClient (hostPortsFile: String, hostPorts: Seq[(String,Int)]) {
 
 	def this(hostPortsFile: String) = this(hostPortsFile, RiakClient.getHostPorts(hostPortsFile))
-	
+
 	val rkv = {
-      val clusterConf = new PBClusterConfig(ClusterConfig.UNLIMITED_CONNECTIONS)
-      hostPorts.map { hp => new PBClientConfig.Builder().withHost(hp._1).withPort(hp._2).build }
+      val clusterConf = new HTTPClusterConfig(ClusterConfig.UNLIMITED_CONNECTIONS)
+      hostPorts.map { hp => new com.basho.riak.client.raw.http.HTTPClientConfig.Builder().withHost(hp._1).withPort(hp._2).build }
                .foreach { clusterConf.addClient(_) }
-      new PBClusterClient(clusterConf)
+      new HTTPClusterClient(clusterConf)
 	}
 	
 	override def toString() = hostPorts.mkString(",")
@@ -48,7 +48,7 @@ class RiakClient (hostPortsFile: String, hostPorts: Seq[(String,Int)]) {
 	def del(bucket: String, key: String) = rkv.delete(bucket, key)
   
 	def keysRange(bucket: String, from: String, to: String) : Buffer[String] = {
-		val q = new BinRangeQuery(KeyIndex.index,  bucket, from, to)
+		val q = new BinRangeQuery(KeyIndex.index, bucket, from, to)
 		rkv.fetchIndex(q).asScala
 	}
 	

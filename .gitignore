@@ -6,3 +6,5 @@ project/target/*
 keys-*
 dist/
 project/project/
+mapred.out
+connect.sh

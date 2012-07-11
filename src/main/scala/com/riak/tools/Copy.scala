@@ -1,20 +1,14 @@
 
 package com.riak.tools
 
-import java.io._
-import scala.collection.JavaConverters.collectionAsScalaIterableConverter
-import scala.io._
-import com.typesafe.config.ConfigFactory
-import akka.actor.ActorSystem
-import akka.actor.{Props, ActorRef, Actor}
-import akka.routing.RoundRobinRouter
-import scopt.immutable.OptionParser
-import com.riak.client.RiakClient
-import com.basho.riak.client.raw.pbc.PBClusterClient
-import com.basho.riak.client.raw.query.indexes.BinRangeQuery
-import com.basho.riak.client.query.indexes.KeyIndex
 import com.basho.riak.client.IRiakObject
-import akka.routing.Broadcast
+import com.riak.client.RiakClient
+import com.typesafe.config.ConfigFactory
+
+import akka.actor.actorRef2Scala
+import akka.actor.{Props, ActorSystem, Actor}
+import akka.routing.{RoundRobinRouter, Broadcast}
+import scopt.immutable.OptionParser
 
 
 object Copy {	
@@ -30,14 +24,14 @@ object Copy {
 			printProgressEvery: Int = 1000)
 	
     def main(args: Array[String]) {
-    	val parser = new OptionParser[Config]("Copy", "1.0 - a tool for copying data between Riak clusters") { def options = Seq(
-    		opt("s", "source", "<file>", "source nodes list filename. Default: %s".format(Config().source)) 
+    	val parser = new OptionParser[Config]("Copy", "1.0 - a tool for copying data between two clusters") { def options = Seq(
+    		opt("s", "source", "<file>", "source nodes ('host:httpport') list filename. Default: %s".format(Config().source)) 
     			{(v: String, c: Config) => c.copy(source = v)},
     		opt("k", "keysAlphabet", "s", "source keys alphabet. Default: %s".format(Config().keysAlphabet)) 
     			{(v: String, c: Config) => c.copy(keysAlphabet = v)},
     		opt("ke", "keysAlphabetEnding", "s", "source keys alphabet ending. Must be > last letter in alphabet. Default: %s".format(Config().keysAlphabetEnding)) 
     			{(v: String, c: Config) => c.copy(keysAlphabetEnding = v)},
-    		opt("d", "dest", "<file>", "destination nodes list filename. Default: %s".format(Config().destination)) 
+    		opt("d", "dest", "<file>", "destination nodes ('host:httpport') list filename. Default: %s".format(Config().destination)) 
     			{(v: String, c: Config) => c.copy(destination = v)},
     		intOpt("t", "timeout", "n", "timeout in ms for Riak operations. Default: %s ms".format(Config().timeoutMs)) 
     			{(v: Int, c: Config) => c.copy(timeoutMs = v.toLong)},
@@ -79,13 +73,12 @@ class CopyMaster() extends Actor {
 	var (count, keyRangeInd) = (0, 0)
 	var lastTs = System.currentTimeMillis
 	var workersDone = 0
-
 	
 	def receive = {		
 		case Copy => self ! nextKeyRange()		
 		case c: NextKeyRange => {
 			val keys = Copy.sc.keysRange(conf.bucket, c.from, c.to)
-			println("Copying range [%s, %s]. Total %d items".format(c.from, c.to, keys.length))			
+			println("Copying range [%s, %s]. Total %d items".format(c.from, c.to, keys.length))
 			keys.foreach { workerRouter ! _ }
 			workerRouter ! Broadcast(EndOfKeyRange())
 		}
@@ -108,10 +101,9 @@ class CopyMaster() extends Actor {
 	}
 	
 	def generateKeyRanges(keysAlphabet: String): Seq[(String,String)] = {
-		val k = keysAlphabet.toSeq.sorted
-		(if (k.length % 2 == 0) k ++ Seq(k.last, conf.keysAlphabetEnding) else k ++ conf.keysAlphabetEnding)
-		.grouped(2).collect{ case Seq(a,b) => (a.toString,b.toString) }.toSeq
-    }
+		val k = keysAlphabet.toSeq.sorted ++ conf.keysAlphabetEnding
+		k.zip(k.slice(1, k.length)).collect{ case (a,b) => (a.toString,b.toString) }.toSeq
+	}
 	
 	def nextKeyRange(): Any = {
 		if (keyRangeInd >= keyRanges.length) return EndOfCopy()
