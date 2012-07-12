@@ -6,7 +6,7 @@ A set of command line tools for Riak, including:
 
 ## Prerequisites
 
-* sbt 0.11.2
+* sbt 0.11.3
 * scala 2.9.1
 
 ## Usage
