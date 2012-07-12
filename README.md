@@ -1,13 +1,13 @@
-# Riak tools
-A set of command line tools for Riak, icluding:
+# Riak command line tools
+A set of command line tools for Riak, including:
 
-- Copy - a tool for copying data between two clusters (use com.riak.tools.Copy to run)
-- Mapred - a tool for running mapreduce jobs (com.riak.tools.Mapred to run)
+- Copy - a tool for copying data between two clusters
+- Mapred - a tool for running mapreduce jobs
 
 ## Prerequisites
 
 * sbt 0.11.2
-* Scala 2.9.1
+* scala 2.9.1
 
 ## Usage
 
