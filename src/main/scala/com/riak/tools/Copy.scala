@@ -9,6 +9,7 @@ import akka.actor.actorRef2Scala
 import akka.actor.{Props, ActorSystem, Actor}
 import akka.routing.{RoundRobinRouter, Broadcast}
 import scopt.immutable.OptionParser
+import com.riak.utils.Keys
 
 
 object Copy {	
@@ -69,7 +70,7 @@ case class EndOfCopy
 class CopyMaster() extends Actor {
 	val conf = Copy.conf
 	val workerRouter = context.actorOf(Props[CopyWorker].withRouter(RoundRobinRouter(conf.numOfWorkers)), name = "workerRouter")
-	val keyRanges: Seq[(String,String)] = generateKeyRanges(conf.keysAlphabet)	
+	val keyRanges: Seq[(String,String)] = Keys.generateKeyRanges(conf.keysAlphabet, conf.keysAlphabetEnding)
 	var (count, keyRangeInd) = (0, 0)
 	var lastTs = System.currentTimeMillis
 	var workersDone = 0
@@ -99,12 +100,7 @@ class CopyMaster() extends Actor {
 		}
 		case EndOfCopy() => { context.stop(self); context.system.shutdown() }
 	}
-	
-	def generateKeyRanges(keysAlphabet: String): Seq[(String,String)] = {
-		val k = keysAlphabet.toSeq.sorted ++ conf.keysAlphabetEnding
-		k.zip(k.slice(1, k.length)).collect{ case (a,b) => (a.toString,b.toString) }.toSeq
-	}
-	
+
 	def nextKeyRange(): Any = {
 		if (keyRangeInd >= keyRanges.length) return EndOfCopy()
 
