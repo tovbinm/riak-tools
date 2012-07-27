@@ -74,33 +74,36 @@ class CopyMaster() extends Actor {
 	val conf = Copy.conf
 	val workerRouter = context.actorOf(Props[CopyWorker].withRouter(RoundRobinRouter(conf.numOfWorkers)), name = "workerRouter")
 	val isKeysFileProvided = conf.keys match { case k: String if k.length > 0 => true case _ => false }	
-	val keyRanges = if (isKeysFileProvided) Seq(("","")) else Keys.generateKeyRanges(conf.keysAlphabet, conf.keysAlphabetEnding)
+	val keyRanges = Keys.generateKeyRanges(conf.keysAlphabet, conf.keysAlphabetEnding)
 	var (count, keyRangeInd) = (0, 0)
 	var lastTs = System.currentTimeMillis
 	var workersDone = 0
 	
 	def receive = {		
-		case Copy => self ! nextKeyRange()		
-		case c: NextKeyRange => {			
+		case Copy => self ! nextKeyRange()
+		case c: NextKeyRange => {
+			var batchSize = 0 
 			(isKeysFileProvided match {
 				case true => {
 					println("Copying using keys file '%s'".format(conf.keys))
-					Keys.getKeysFromFile(conf.keys)
+					Keys.getKeysFromFile(conf.keys, start = count, end = count + conf.numOfWorkers * 1000)
 				}
 				case _ => {
 					val keys = Copy.sc.keysRange(conf.bucket, c.from, c.to)
 					println("Copying range [%s, %s]. Total %d items".format(c.from, c.to, keys.length))
 					keys
 				}
-			}) foreach { workerRouter ! _ }
-			workerRouter ! Broadcast(EndOfKeyRange())
+			}) foreach { x: String => { batchSize += 1; workerRouter ! x } }
+
+			if (batchSize == 0) self ! EndOfCopy()
 			
+			workerRouter ! Broadcast(EndOfKeyRange())
 		}
 		case c: Int => {
 			count += c
 			if (count % conf.printProgressEvery == 0) {
 				val now = System.currentTimeMillis				
-				println("Copied %d items. Elapsed: %dms".format(count, now - lastTs))
+				println("%d items processed. Elapsed: %dms".format(count, now - lastTs))
 				lastTs = now
 			}
 		}
@@ -111,15 +114,18 @@ class CopyMaster() extends Actor {
 				workersDone = 0
 			}
 		}
-		case EndOfCopy() => { println("Done. Total copied %d items.".format(count)); context.stop(self); context.system.shutdown() }
+		case EndOfCopy() => { println("Done. Total %d items processed.".format(count)); context.stop(self); context.system.shutdown() }
 	}
 
 	def nextKeyRange(): Any = {
-		if (keyRangeInd >= keyRanges.length) return EndOfCopy()
-
-		val kr = keyRanges(keyRangeInd)
-		keyRangeInd = keyRangeInd + 1
-		NextKeyRange(kr._1, kr._2)
+		if (!isKeysFileProvided) {
+			if (keyRangeInd >= keyRanges.length) return EndOfCopy()
+	
+			val kr = keyRanges(keyRangeInd)
+			keyRangeInd = keyRangeInd + 1
+			NextKeyRange(kr._1, kr._2)
+		}
+		else NextKeyRange("","")
 	}
 }
 
@@ -128,9 +134,10 @@ class CopyWorker extends Actor {
 	def receive = {		
 		case key: String => {
 			Copy.sc.get(conf.bucket, key, conf.stopOnFetchConflicts) match {
-    			case item: IRiakObject => { Copy.dc.set(item); sender ! 1 }
+    			case item: IRiakObject => Copy.dc.set(item)
     			case _ => println("No value for key '%s'".format(key))
 			}
+			sender ! 1
 		}
 		case EndOfKeyRange() => sender ! EndOfKeyRange()
 	}

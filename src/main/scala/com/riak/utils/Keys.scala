@@ -8,7 +8,7 @@ object Keys {
 		val k = keysAlphabet.toSeq.sorted ++ keysAlphabetEnding
 		k.zip(k.slice(1, k.length)).collect{ case (a,b) => (a.toString,b.toString) }.toSeq
 	}
-	
-	def getKeysFromFile(keys: String) = for (val line <- Source.fromFile(keys).getLines) yield line
+
+	def getKeysFromFile(keys: String, start: Int = 0, end: Int = Int.MaxValue) = Source.fromFile(keys).getLines.slice(start, end)
 
 }
