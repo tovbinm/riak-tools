@@ -17,7 +17,8 @@ object Copy {
 			source: String = "conf/source.nodes",
 			keysAlphabet: String = "0123456789abcdefghjkmnpqrstvwxyz", //Crockford Base32
 			keysAlphabetEnding: String = "~",
-			destination: String = "conf/destination.nodes", 
+			keys: String = "",
+			destination: String = "conf/destination.nodes",
 			bucket: String = "",			
 			stopOnFetchConflicts: Boolean = false,
 			timeoutMs: Long = 3600*1000,
@@ -32,6 +33,8 @@ object Copy {
     			{(v: String, c: Config) => c.copy(keysAlphabet = v)},
     		opt("ke", "keysAlphabetEnding", "s", "source keys alphabet ending. Must be > last letter in alphabet. Default: %s".format(Config().keysAlphabetEnding)) 
     			{(v: String, c: Config) => c.copy(keysAlphabetEnding = v)},
+    		opt("ks", "keys", "<file>", "path to keys file '\\n' separated (may be used instead of keys alphabet)") 
+    			{(v: String, c: Config) => c.copy(keys = v)},
     		opt("d", "dest", "<file>", "destination nodes ('host:httpport') list filename. Default: %s".format(Config().destination)) 
     			{(v: String, c: Config) => c.copy(destination = v)},
     		intOpt("t", "timeout", "n", "timeout in ms for Riak operations. Default: %s ms".format(Config().timeoutMs)) 
@@ -70,18 +73,28 @@ case class EndOfCopy
 class CopyMaster() extends Actor {
 	val conf = Copy.conf
 	val workerRouter = context.actorOf(Props[CopyWorker].withRouter(RoundRobinRouter(conf.numOfWorkers)), name = "workerRouter")
-	val keyRanges: Seq[(String,String)] = Keys.generateKeyRanges(conf.keysAlphabet, conf.keysAlphabetEnding)
+	val isKeysFileProvided = conf.keys match { case k: String if k.length > 0 => true case _ => false }	
+	val keyRanges = if (isKeysFileProvided) Seq(("","")) else Keys.generateKeyRanges(conf.keysAlphabet, conf.keysAlphabetEnding)
 	var (count, keyRangeInd) = (0, 0)
 	var lastTs = System.currentTimeMillis
 	var workersDone = 0
 	
 	def receive = {		
 		case Copy => self ! nextKeyRange()		
-		case c: NextKeyRange => {
-			val keys = Copy.sc.keysRange(conf.bucket, c.from, c.to)
-			println("Copying range [%s, %s]. Total %d items".format(c.from, c.to, keys.length))
-			keys.foreach { workerRouter ! _ }
+		case c: NextKeyRange => {			
+			(isKeysFileProvided match {
+				case true => {
+					println("Copying using keys file '%s'".format(conf.keys))
+					Keys.getKeysFromFile(conf.keys)
+				}
+				case _ => {
+					val keys = Copy.sc.keysRange(conf.bucket, c.from, c.to)
+					println("Copying range [%s, %s]. Total %d items".format(c.from, c.to, keys.length))
+					keys
+				}
+			}) foreach { workerRouter ! _ }
 			workerRouter ! Broadcast(EndOfKeyRange())
+			
 		}
 		case c: Int => {
 			count += c
@@ -98,7 +111,7 @@ class CopyMaster() extends Actor {
 				workersDone = 0
 			}
 		}
-		case EndOfCopy() => { context.stop(self); context.system.shutdown() }
+		case EndOfCopy() => { println("Done. Total copied %d items.".format(count)); context.stop(self); context.system.shutdown() }
 	}
 
 	def nextKeyRange(): Any = {
