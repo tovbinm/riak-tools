@@ -136,11 +136,16 @@ class CopyWorker extends Actor {
 	val conf = Copy.conf
 	def receive = {		
 		case key: String => {
+		  try {
 			Copy.sc.get(conf.bucket, key, conf.stopOnFetchConflicts) match {
     			case item: IRiakObject => Copy.dc.set(item)
     			case _ => println("No value for key '%s'".format(key))
 			}
-			sender ! 1
+		  } catch {
+		    case e => {
+		    	println("Failed to copy '%s'. Error: %s".format(key, e.getCause))
+		    	sender ! 1
+		  }}
 		}
 		case e: EndOfKeyRange => sender ! e
 	}

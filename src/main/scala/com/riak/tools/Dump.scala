@@ -18,6 +18,7 @@ object Dump {
 			source: String = "conf/source.nodes",
 			bucket: String = "",
 			output: String = "dump.out",
+			keyPrefixes: String = "",
 			keysAlphabet: String = "0123456789abcdefghjkmnpqrstvwxyz", //Crockford Base32
 			keysAlphabetEnding: String = "~",			
 			sep: String = "\n")
@@ -28,6 +29,8 @@ object Dump {
     			{(v: String, c: Config) => c.copy(source = v)},
     		opt("o", "out", "<file>", "output filename. Default: %s".format(Config().output)) 
     			{(v: String, c: Config) => c.copy(output = v)},
+    		opt("kr", "keyPrefixes", "<file>", "a file containing key prefixes")
+    			{(v: String, c: Config) => c.copy(keyPrefixes = v)},
     		opt("k", "keysAlphabet", "s", "source keys alphabet. Default: %s".format(Config().keysAlphabet)) 
     			{(v: String, c: Config) => c.copy(keysAlphabet = v)},
     		opt("ke", "keysAlphabetEnding", "s", "source keys alphabet ending. Must be > last letter in alphabet. Default: %s".format(Config().keysAlphabetEnding)) 
@@ -43,13 +46,21 @@ object Dump {
 		val sc = RiakClient.newInstance(config.source)
 		try {
 			val out = new PrintWriter(new File(config.output))
-			Keys.generateKeyRanges(config.keysAlphabet, config.keysAlphabetEnding) foreach { range => {
-				print("Dumping keys range [%s, %s]...".format(range._1, range._2))
+
+			val keyRanges = config.keyPrefixes match {
+			  case kp: String if kp.length > 0 => Keys.generateKeyRangesFromFile(config.keyPrefixes, config.keysAlphabetEnding)
+			  case _ => Keys.generateKeyRanges(config.keysAlphabet, config.keysAlphabetEnding)
+			}
+			val totalRanges = keyRanges.length
+			var (curr, totalKeys) = (1, 0)
+			keyRanges foreach { range => {
+				print("Processing key range [%s, %s] (%d out of %d) ...".format(range._1, range._2, curr, totalRanges))
 				var count = 0
-				sc.keysRange(config.bucket, range._1, range._2) foreach { k => out.write(k + config.sep); count = count + 1 }
-				println(" Dumped %d items.".format(count))
+				//sc.keysRange(config.bucket, range._1, range._2) foreach { k => out.write(k + config.sep); count += 1 }
+				println(" Dumped %d keys.".format(count))
+				totalKeys += count; curr += 1
 			}}
-			println("Done")
+			println("Done. Dumped %d keys in %d ranges".format(totalKeys, totalRanges))
 			out.close()
 		}
 		finally { sc.shutdown() }
