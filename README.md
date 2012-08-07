@@ -1,8 +1,9 @@
 # Riak command line tools
 A set of command line tools for Riak, including:
 
-- Copy - a tool for copying data between two clusters
-- Mapred - a tool for running mapreduce jobs
+- Copy - copy specified bucket contents between two clusters
+- MapRed - run mapreduce jobs and write results to a local file
+- Dump - dump all bucket keys to a local file 
 
 ## Prerequisites
 
