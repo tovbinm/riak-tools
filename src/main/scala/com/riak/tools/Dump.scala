@@ -56,7 +56,7 @@ object Dump {
 			keyRanges foreach { range => {
 				print("Processing key range [%s, %s] (%d out of %d) ...".format(range._1, range._2, curr, totalRanges))
 				var count = 0
-				//sc.keysRange(config.bucket, range._1, range._2) foreach { k => out.write(k + config.sep); count += 1 }
+				sc.keysRange(config.bucket, range._1, range._2) foreach { k => out.write(k + config.sep); count += 1 }
 				println(" Dumped %d keys.".format(count))
 				totalKeys += count; curr += 1
 			}}
