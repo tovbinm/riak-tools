@@ -144,8 +144,8 @@ class CopyWorker extends Actor {
 		  } catch {
 		    case e => {
 		    	println("Failed to copy '%s'. Error: %s".format(key, e.getCause))
-		    	sender ! 1
 		  }}
+		  finally { sender ! 1 }
 		}
 		case e: EndOfKeyRange => sender ! e
 	}
